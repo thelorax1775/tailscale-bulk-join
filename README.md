@@ -1,4 +1,4 @@
-# TailAdjuster
+# tailscale-bulk-join
 
 **Bulk-deploy [Tailscale](https://tailscale.com) across every LXC container and VM on a Proxmox VE node — in one command.**
 
@@ -34,7 +34,9 @@
 ## Quick start
 
 ```bash
-# 1. Get the script onto your Proxmox node (e.g. clone or scp it), then:
+# 1. Get the script onto your Proxmox node, then:
+git clone https://github.com/thelorax1775/tailscale-bulk-join.git
+cd tailscale-bulk-join
 chmod +x tailscale-bulk-deploy.sh
 
 # 2. Export a Tailscale auth key
@@ -139,6 +141,14 @@ sudo systemctl enable --now qemu-guest-agent
 ## Safety
 
 This script modifies guest configurations (container `.conf` files), reboots guests when required, and installs software inside them. It's designed to be safe and idempotent, but you are running it against your whole node — **read it first** (it's a single, well-commented Bash file) and consider trying it on a single test guest before a full sweep.
+
+---
+
+## Project status
+
+Feature-complete single-script tool, last changed July 2026. There is no automated test suite; behaviour has been exercised by hand on a Proxmox VE node, and multi-distro guest support beyond Debian-based guests has not been verified. The repository was previously named `TailAdjuster`.
+
+Related: [tailscale-mullvad-bulk-deploy](https://github.com/thelorax1775/tailscale-mullvad-bulk-deploy) reuses this script's Proxmox scan/enroll pattern and additionally deploys a Mullvad exit-node kill-switch on each guest. Use this repo when you only want guests joined to the tailnet.
 
 ---
 
