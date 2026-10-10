@@ -146,7 +146,7 @@ This script modifies guest configurations (container `.conf` files), reboots gue
 
 ## Project status
 
-Feature-complete single-script tool, last changed July 2026. There is no automated test suite; behaviour has been exercised by hand on a Proxmox VE node, and multi-distro guest support beyond Debian-based guests has not been verified. The repository was previously named `TailAdjuster`.
+Feature-complete single-script tool, last changed July 2026. There is no automated test suite or CI. The script passes `bash -n`; end-to-end behaviour on a live node, and guest support for `apk`/`dnf`/`yum` distros, is not verified in this repo. The repository was previously named `TailAdjuster`.
 
 Related: [tailscale-mullvad-bulk-deploy](https://github.com/thelorax1775/tailscale-mullvad-bulk-deploy) reuses this script's Proxmox scan/enroll pattern and additionally deploys a Mullvad exit-node kill-switch on each guest. Use this repo when you only want guests joined to the tailnet.
 
