@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Fake `pct` for the test suite. Guests are directories under
+# $FAKE_ROOT/guests/<vmid>; `pct exec` runs the command with PATH set to the
+# guest's own bin dir, so `command -v apk` etc. inside the script under test
+# see only what that fake guest has "installed".
+set -u
+: "${FAKE_ROOT:?FAKE_ROOT must be set by the test helper}"
+
+sub="${1:-}"
+id="${2:-}"
+guest="$FAKE_ROOT/guests/$id"
+
+case "$sub" in
+    exec)
+        shift 2
+        [[ "${1:-}" == "--" ]] && shift
+        # A guest that is missing or marked down does not answer pct exec.
+        [[ -d "$guest" && ! -e "$guest/down" ]] || exit 255
+        cd "$guest" || exit 255
+        export GUEST_DIR="$guest" GUEST_ID="$id"
+        export PATH="$guest/bin"
+        exec "$@"
+        ;;
+    reboot)
+        printf 'pct reboot %s\n' "$id" >> "$FAKE_ROOT/calls.log"
+        [[ -e "$guest/reboot_fails" ]] && exit 1
+        exit 0
+        ;;
+    *)
+        printf 'pct UNEXPECTED %s\n' "$*" >> "$FAKE_ROOT/calls.log"
+        echo "fake pct: unsupported call: $*" >&2
+        exit 2
+        ;;
+esac

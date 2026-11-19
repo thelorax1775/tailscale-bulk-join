@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Fake `qm` for the test suite. Emulates the three calls the script makes:
+#   qm guest cmd <vmid> ping
+#   qm guest exec <vmid> --timeout N -- <cmd...>   (prints the agent's JSON)
+#   qm reboot <vmid>
+# A VM's guest agent "responds" when $FAKE_ROOT/guests/<vmid>/agent exists.
+set -u
+: "${FAKE_ROOT:?FAKE_ROOT must be set by the test helper}"
+
+log() { printf '%s\n' "$*" >> "$FAKE_ROOT/calls.log"; }
+
+case "${1:-} ${2:-}" in
+    "guest cmd")
+        guest="$FAKE_ROOT/guests/${3:-}"
+        [[ "${4:-}" == "ping" ]] || { log "qm UNEXPECTED $*"; exit 2; }
+        [[ -e "$guest/agent" ]]
+        exit
+        ;;
+    "guest exec")
+        id="${3:-}"
+        guest="$FAKE_ROOT/guests/$id"
+        shift 3
+        while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
+        [[ "${1:-}" == "--" ]] && shift
+        [[ -e "$guest/agent" ]] || { echo "QEMU guest agent is not running" >&2; exit 1; }
+
+        errfile="$guest/.stderr"
+        rc=0
+        out=$(
+            cd "$guest" || exit 255
+            export GUEST_DIR="$guest" GUEST_ID="$id"
+            export PATH="$guest/bin"
+            exec "$@" 2>"$errfile"
+        ) || rc=$?
+        err=$(<"$errfile")
+
+        # Like the real agent: out-data/err-data are present only when
+        # non-empty, and qm itself exits 0 whatever the guest command did.
+        jq -n --argjson rc "$rc" --arg out "$out" --arg err "$err" '
+            {exitcode: $rc, exited: 1}
+            + (if $out == "" then {} else {"out-data": ($out + "\n")} end)
+            + (if $err == "" then {} else {"err-data": ($err + "\n")} end)'
+        exit 0
+        ;;
+    reboot\ *)
+        log "qm reboot $2"
+        [[ -e "$FAKE_ROOT/guests/$2/reboot_fails" ]] && exit 1
+        exit 0
+        ;;
+    *)
+        log "qm UNEXPECTED $*"
+        echo "fake qm: unsupported call: $*" >&2
+        exit 2
+        ;;
+esac

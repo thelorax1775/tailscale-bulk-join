@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fake in-guest `curl`: never touches the network. Prints a marker script in
+# place of Tailscale's installer; the fake `sh` checks for the marker.
+printf 'guest %s: curl %s\n' "${GUEST_ID:?}" "$*" >> "${FAKE_ROOT:?}/calls.log"
+[[ -e "${GUEST_DIR:?}/curl_fails" ]] && exit 22
+echo "#!/bin/sh"
+echo "# fake tailscale installer"

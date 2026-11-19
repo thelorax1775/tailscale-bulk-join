@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake in-guest `systemctl`: records the call and succeeds.
+printf 'guest %s: systemctl %s\n' "${GUEST_ID:?}" "$*" >> "${FAKE_ROOT:?}/calls.log"

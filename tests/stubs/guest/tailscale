@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Fake in-guest `tailscale`. State lives in $GUEST_DIR:
+#   joined    exists once the guest is "in the tailnet"
+#   up_plan   one line per future `tailscale up` call: "ok" joins, any other
+#             text is printed as the error and the call fails. When the plan
+#             is empty, `up` succeeds.
+set -u
+: "${FAKE_ROOT:?}" "${GUEST_DIR:?}" "${GUEST_ID:?}"
+
+case "${1:-}" in
+    status)
+        if [[ -e "$GUEST_DIR/joined" ]]; then
+            echo "100.64.0.$(( GUEST_ID % 250 + 1 ))  guest-$GUEST_ID  fake@  linux  -"
+            exit 0
+        fi
+        echo "Logged out."
+        exit 1
+        ;;
+    up)
+        printf 'guest %s: tailscale %s\n' "$GUEST_ID" "$*" >> "$FAKE_ROOT/calls.log"
+        step="ok"
+        plan="$GUEST_DIR/up_plan"
+        if [[ -s "$plan" ]]; then
+            mapfile -t lines < "$plan"
+            step="${lines[0]}"
+            : > "$plan"
+            for line in "${lines[@]:1}"; do
+                printf '%s\n' "$line" >> "$plan"
+            done
+        fi
+        if [[ "$step" == "ok" ]]; then
+            : > "$GUEST_DIR/joined"
+            exit 0
+        fi
+        printf '%s\n' "$step" >&2
+        exit 1
+        ;;
+    *)
+        printf 'guest %s: tailscale UNEXPECTED %s\n' "$GUEST_ID" "$*" >> "$FAKE_ROOT/calls.log"
+        exit 2
+        ;;
+esac
