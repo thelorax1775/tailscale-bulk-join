@@ -287,6 +287,31 @@ setup() {
     if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
 }
 
+@test "LXC: a key in the tailscaled journal after a failed join is redacted" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    guest_has_tailscale 101
+    guest_up_plan 101 "some failure" "some failure"
+    printf 'tailscaled: auth %s\n' "$FAKE_KEY" > "$FAKE_ROOT/guests/101/journal_extra"
+    run_script
+    assert_output_has "fake tailscaled journal for guest 101"
+    assert_output_has "[redacted-key]"
+    refute_output_has "tskey-"
+    if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
+@test "VM: a key in the tailscaled journal after a failed join is redacted" {
+    add_vm 201 db
+    guest_has_tailscale 201
+    guest_up_plan 201 "some failure" "some failure"
+    printf 'tailscaled: auth %s\n' "$FAKE_KEY" > "$FAKE_ROOT/guests/201/journal_extra"
+    run_script
+    assert_output_has "fake tailscaled journal for guest 201"
+    assert_output_has "[redacted-key]"
+    refute_output_has "tskey-"
+    if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
 @test "a key that does not look like tskey-... is redacted too" {
     export TS_AUTHKEY="plainsecret123"
     add_lxc 101 web

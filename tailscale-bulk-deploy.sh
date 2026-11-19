@@ -158,6 +158,7 @@ redact() {
     if [[ -n "$AUTH_KEY" ]]; then
         text=${text//"$AUTH_KEY"/[redacted-key]}
     fi
+    [[ -n "$text" ]] || return 0
     printf '%s\n' "$text" | sed -E 's/tskey-[A-Za-z0-9_-]+/[redacted-key]/g'
 }
 
