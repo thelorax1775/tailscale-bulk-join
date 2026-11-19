@@ -18,6 +18,8 @@ case "${1:-}" in
         ;;
     up)
         printf 'guest %s: tailscale %s\n' "$GUEST_ID" "$*" >> "$FAKE_ROOT/calls.log"
+        # Real tailscale echoes the whole command, key included, when it
+        # refuses a bare `up`; "@ECHO@" in a plan line stands for that.
         step="ok"
         plan="$GUEST_DIR/up_plan"
         if [[ -s "$plan" ]]; then
@@ -32,6 +34,7 @@ case "${1:-}" in
             : > "$GUEST_DIR/joined"
             exit 0
         fi
+        step="${step//@ECHO@/tailscale up $*}"
         printf '%s\n' "$step" >&2
         exit 1
         ;;

@@ -39,6 +39,9 @@ setup() {
         "failed to connect to local tailscaled; it doesn't appear to be running (sudo systemctl start tailscaled ?)" \
         "dial unix /var/run/tailscale/tailscaled.sock: connect: no such file or directory" \
         "context deadline exceeded" \
+        "dial tcp: i/o timeout while validating authkey" \
+        "authkey flag provided but the value is not valid yet, retrying" \
+        "requested tags are being applied" \
         "" ; do
         run_fn is_authkey_error "$msg"
         [[ "$status" -ne 0 ]] || _fail "should not be treated as an auth-key error: '$msg'"

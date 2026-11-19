@@ -144,7 +144,21 @@ inc() {
 # so callers use this to fail fast and short-circuit the rest of the run.
 is_authkey_error() {
     printf '%s' "$1" | grep -qiE \
-        'invalid key|not valid|key.*expired|expired.*key|already been used|is invalid|authkey|requested tags'
+        'invalid key|key (has )?expired|expired key|already been used|requested tags.*(invalid|not permitted)'
+}
+
+# Filter: copies stdin to stdout with every auth key hidden. Guest output is
+# only ever printed through this, because `tailscale up` can echo its whole
+# command line (including --auth-key=tskey-...) in an error, and everything we
+# print is also written to the run log. Hides the literal key we were given
+# and anything shaped like a Tailscale key.
+redact() {
+    local text
+    text=$(cat)
+    if [[ -n "$AUTH_KEY" ]]; then
+        text=${text//"$AUTH_KEY"/[redacted-key]}
+    fi
+    printf '%s\n' "$text" | sed -E 's/tskey-[A-Za-z0-9_-]+/[redacted-key]/g'
 }
 
 # ---------------------------------------------------------------------------
@@ -249,15 +263,19 @@ join_tailnet_lxc() {
     # rejection apart from the racey tailscaled-startup failure. Return code 2
     # signals "auth key rejected — retrying/rebooting is pointless".
     local out
-    if out=$(pct exec "$ct" -- bash -c "
-        tailscale up --reset --authkey '$AUTH_KEY' --hostname '$hostname' $EXTRA_ARGS
+    # The key goes in on stdin, never in the pct/bash command line (which any
+    # user on the host can read with ps). It is only an argument of the
+    # `tailscale up` process inside the guest.
+    if out=$(printf '%s\n' "$AUTH_KEY" | pct exec "$ct" -- bash -c "
+        IFS= read -r key
+        tailscale up --reset --authkey \"\$key\" --hostname '$hostname' $EXTRA_ARGS
     " 2>&1); then
-        [[ -n "$out" ]] && printf '%s\n' "$out"
+        [[ -n "$out" ]] && printf '%s\n' "$out" | redact
         echo "[+] Joined tailnet"
         return 0
     fi
 
-    [[ -n "$out" ]] && printf '%s\n' "$out"
+    [[ -n "$out" ]] && printf '%s\n' "$out" | redact
 
     if is_authkey_error "$out"; then
         echo "[X] Tailnet join failed — control server rejected the auth key"
@@ -266,7 +284,7 @@ join_tailnet_lxc() {
 
     echo "[X] Tailnet join failed"
     echo "    --- tailscaled journal (last 15 lines) ---"
-    pct exec "$ct" -- journalctl -u tailscaled -n 15 --no-pager 2>/dev/null | sed 's/^/    /' || true
+    pct exec "$ct" -- journalctl -u tailscaled -n 15 --no-pager 2>/dev/null | redact | sed 's/^/    /' || true
     echo "    -------------------------------------------"
     return 1
 }
@@ -398,10 +416,12 @@ wait_for_vm_agent() {
 # Returns success/failure based on the guest's exit code. If print_output
 # is "print", also echoes the guest's stdout (used for diagnostics).
 vm_guest_exec() {
-    local vmid="$1" cmd="$2" print_output="${3:-}"
+    local vmid="$1" cmd="$2" print_output="${3:-}" pass_stdin="${4:-}"
     local json exitcode outdata
+    local -a qm_opts=(--timeout 60)
+    [[ "$pass_stdin" == "stdin" ]] && qm_opts+=(--pass-stdin 1)
 
-    json=$(qm guest exec "$vmid" --timeout 60 -- bash -c "$cmd" 2>/dev/null) || return 1
+    json=$(qm guest exec "$vmid" "${qm_opts[@]}" -- bash -c "$cmd" 2>/dev/null) || return 1
     exitcode=$(echo "$json" | jq -r '.exitcode // 1')
 
     if [[ "$print_output" == "print" ]]; then
@@ -460,14 +480,16 @@ join_tailnet_vm() {
     # which is the only stream vm_guest_exec surfaces — without it an auth-key
     # rejection message would be invisible to is_authkey_error below.
     local out
-    if out=$(vm_guest_exec "$vmid" \
-        "tailscale up --reset --authkey '$AUTH_KEY' --hostname '$hostname' $EXTRA_ARGS 2>&1" print); then
-        [[ -n "$out" ]] && printf '%s\n' "$out"
+    # The key is passed on stdin (qm guest exec --pass-stdin), not in the qm
+    # command line.
+    if out=$(printf '%s\n' "$AUTH_KEY" | vm_guest_exec "$vmid" \
+        "IFS= read -r key; tailscale up --reset --authkey \"\$key\" --hostname '$hostname' $EXTRA_ARGS 2>&1" print stdin); then
+        [[ -n "$out" ]] && printf '%s\n' "$out" | redact
         echo "[+] Joined tailnet"
         return 0
     fi
 
-    [[ -n "$out" ]] && printf '%s\n' "$out"
+    [[ -n "$out" ]] && printf '%s\n' "$out" | redact
 
     if is_authkey_error "$out"; then
         echo "[X] Tailnet join failed — control server rejected the auth key"
@@ -476,7 +498,7 @@ join_tailnet_vm() {
 
     echo "[X] Tailnet join failed"
     echo "    --- tailscaled journal (last 15 lines) ---"
-    vm_guest_exec "$vmid" 'journalctl -u tailscaled -n 15 --no-pager' print | sed 's/^/    /' || true
+    vm_guest_exec "$vmid" 'journalctl -u tailscaled -n 15 --no-pager' print | redact | sed 's/^/    /' || true
     echo "    -------------------------------------------"
     return 1
 }

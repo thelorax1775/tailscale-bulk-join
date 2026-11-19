@@ -18,6 +18,7 @@ case "${1:-} ${2:-}" in
         ;;
     "guest exec")
         id="${3:-}"
+        printf 'qm %s\n' "$*" >> "$FAKE_ROOT/argv.log"
         guest="$FAKE_ROOT/guests/$id"
         shift 3
         while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
