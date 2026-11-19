@@ -48,7 +48,13 @@ esac
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-LOG="/root/tailscale-bulk-$(date +%F_%H-%M-%S).log"
+# The two paths below can be overridden from the environment. The defaults
+# are what every real run uses; the overrides exist so the test suite
+# (tests/*.bats) can run the script against a temp dir instead of the host.
+#   TS_BULK_LOG            Log file path.
+#   TS_BULK_LXC_CONF_DIR   Directory holding the <vmid>.conf container configs.
+LOG="${TS_BULK_LOG:-/root/tailscale-bulk-$(date +%F_%H-%M-%S).log}"
+LXC_CONF_DIR="${TS_BULK_LXC_CONF_DIR:-/etc/pve/lxc}"
 AUTH_KEY="${TS_AUTHKEY:-}"
 NODE="${PVE_NODE:-$(hostname -s)}"
 EXTRA_ARGS="${TS_EXTRA_ARGS:-}"
@@ -84,7 +90,10 @@ echo
 # ---------------------------------------------------------------------------
 # Preflight checks
 # ---------------------------------------------------------------------------
-if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+# TEST-ONLY: TS_BULK_TEST_ONLY_SKIP_ROOT_CHECK=1 lets the test suite run this
+# script unprivileged against stubbed pct/qm/pvesh. Never set it on a real
+# node: without root nothing below can work.
+if [[ "${TS_BULK_TEST_ONLY_SKIP_ROOT_CHECK:-0}" != "1" && "${EUID:-$(id -u)}" -ne 0 ]]; then
     echo "[X] This script must be run as root on a Proxmox VE node."
     exit 1
 fi
@@ -151,7 +160,7 @@ is_lxc_tailscale_active() {
 }
 
 lxc_is_privileged() {
-    local conf="/etc/pve/lxc/$1.conf"
+    local conf="$LXC_CONF_DIR/$1.conf"
     ! grep -q '^unprivileged:\s*1' "$conf" 2>/dev/null
 }
 
@@ -170,7 +179,7 @@ wait_for_lxc_ready() {
 
 enable_tun_lxc() {
     local ct="$1"
-    local conf="/etc/pve/lxc/${ct}.conf"
+    local conf="$LXC_CONF_DIR/${ct}.conf"
 
     if grep -q 'lxc.cgroup2.devices.allow: c 10:200 rwm' "$conf" 2>/dev/null; then
         return 1   # already configured, nothing changed

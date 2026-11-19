@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Fake in-guest `sh`, the receiving end of `curl ... | sh`. It runs nothing:
+# it checks that it was fed the fake installer, then "installs" tailscale by
+# linking the fake tailscale into the guest's bin dir.
+# Fails when $GUEST_DIR/install_fails exists.
+set -u
+: "${FAKE_ROOT:?}" "${GUEST_DIR:?}" "${GUEST_ID:?}" "${STUB_GUEST_DIR:?}" "${STUB_LN:?}"
+
+input=$(</dev/stdin)
+if [[ "$input" != *"fake tailscale installer"* ]]; then
+    printf 'guest %s: sh UNEXPECTED input\n' "$GUEST_ID" >> "$FAKE_ROOT/calls.log"
+    exit 1
+fi
+printf 'guest %s: sh ran tailscale installer\n' "$GUEST_ID" >> "$FAKE_ROOT/calls.log"
+[[ -e "$GUEST_DIR/install_fails" ]] && exit 1
+"$STUB_LN" -sf "$STUB_GUEST_DIR/tailscale" "$GUEST_DIR/bin/tailscale"

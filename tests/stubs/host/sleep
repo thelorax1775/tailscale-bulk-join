@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake `sleep`: returns at once so the wait/retry paths do not slow tests.
+printf 'sleep %s\n' "$*" >> "${FAKE_ROOT:?}/calls.log"

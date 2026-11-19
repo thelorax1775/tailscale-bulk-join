@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Fake `pvesh`: serves the guest lists the test wrote to $FAKE_ROOT.
+set -u
+: "${FAKE_ROOT:?FAKE_ROOT must be set by the test helper}"
+
+# FAKE_PVESH_EMPTY=1: a node with no guests, whatever the lists say. Used when
+# a test sources the script only to call one of its functions.
+if [[ "${FAKE_PVESH_EMPTY:-0}" == "1" && "${1:-}" == "get" ]]; then
+    echo '[]'
+    exit 0
+fi
+
+if [[ "${1:-}" == "get" && "${3:-} ${4:-}" == "--output-format json" ]]; then
+    case "${2:-}" in
+        "/nodes/${FAKE_NODE:-testnode}/lxc")  exec cat "$FAKE_ROOT/lxc.json" ;;
+        "/nodes/${FAKE_NODE:-testnode}/qemu") exec cat "$FAKE_ROOT/qemu.json" ;;
+    esac
+fi
+printf 'pvesh UNEXPECTED %s\n' "$*" >> "$FAKE_ROOT/calls.log"
+echo "fake pvesh: unsupported call: $*" >&2
+exit 2

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake in-guest `journalctl`: one recognisable line for the diagnostics block.
+echo "fake tailscaled journal for guest ${GUEST_ID:?}"

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Fake host `apt`: the script may try to install jq on the host. Tests must
+# never install anything, so record the call and fail.
+printf 'host apt %s\n' "$*" >> "${FAKE_ROOT:?}/calls.log"
+exit 1

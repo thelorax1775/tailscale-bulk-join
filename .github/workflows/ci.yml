@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ShellCheck and bats
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck, bats and jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck bats jq
+          shellcheck --version
+          bats --version
+
+      - name: Syntax check
+        run: bash -n tailscale-bulk-deploy.sh
+
+      - name: ShellCheck
+        run: shellcheck tailscale-bulk-deploy.sh tests/*.bash tests/*.bats tests/stubs/host/* tests/stubs/guest/*
+
+      - name: Tests
+        run: bats tests

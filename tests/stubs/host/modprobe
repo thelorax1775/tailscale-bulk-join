@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake `modprobe`: only records that it was called. With the fake lsmod it
+# should never be reached; the log line makes it visible if it is.
+printf 'modprobe %s\n' "$*" >> "${FAKE_ROOT:?}/calls.log"

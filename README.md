@@ -146,7 +146,20 @@ This script modifies guest configurations (container `.conf` files), reboots gue
 
 ## Project status
 
-Feature-complete single-script tool, last changed July 2026. There is no automated test suite or CI. The script passes `bash -n`; end-to-end behaviour on a live node, and guest support for `apk`/`dnf`/`yum` distros, is not verified in this repo. The repository was previously named `TailAdjuster`.
+Feature-complete single-script tool, last changed July 2026. The repository was previously named `TailAdjuster`.
+
+**Tests and CI.** Every pull request and every push to `main` runs `bash -n`, [ShellCheck](https://www.shellcheck.net/) and a [bats](https://github.com/bats-core/bats-core) test suite on GitHub Actions (`.github/workflows/ci.yml`). The suite in `tests/` runs the real script against a fake node: `pct`, `qm`, `pvesh` and the in-guest commands (`tailscale`, `apt`/`apk`/`dnf`/`yum`, `curl`, `systemctl`) are stubs from `tests/stubs/`, and everything it writes goes to a temp dir. It covers the auth-key error detection and fail-fast, the skip rules, the reboot-and-retry-once flow, the TUN config edit, the counters and summary, and `--help`.
+
+What that does **not** prove: the tests never touch a real Proxmox node, guest or tailnet. The `apk`, `dnf` and `yum` install paths in particular are exercised with stubs only, not on real Alpine, Fedora or CentOS guests, and end-to-end behaviour on a live node is not verified in this repo.
+
+To run the checks yourself (needs `bats`, `shellcheck` and `jq`; no root, no Proxmox):
+
+```bash
+shellcheck tailscale-bulk-deploy.sh tests/*.bash tests/*.bats tests/stubs/host/* tests/stubs/guest/*
+bats tests
+```
+
+The suite points the script at its temp dir with `TS_BULK_LOG` (log file path) and `TS_BULK_LXC_CONF_DIR` (container config directory), and skips the root check with `TS_BULK_TEST_ONLY_SKIP_ROOT_CHECK=1`. These exist for the tests; leave them unset on a real node, where the defaults (`/root/tailscale-bulk-<timestamp>.log`, `/etc/pve/lxc`, root required) apply.
 
 Related: [tailscale-mullvad-bulk-deploy](https://github.com/thelorax1775/tailscale-mullvad-bulk-deploy) reuses this script's Proxmox scan/enroll pattern and additionally deploys a Mullvad exit-node kill-switch on each guest. Use this repo when you only want guests joined to the tailnet.
 

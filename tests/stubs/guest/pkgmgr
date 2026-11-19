@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Fake in-guest package manager. The test helper links it into a guest's bin
+# dir as apt, apk, dnf or yum; it records the name it was called by and its
+# arguments. Fails when $GUEST_DIR/pkg_fails exists.
+printf 'guest %s: %s %s\n' "${GUEST_ID:?}" "${0##*/}" "$*" >> "${FAKE_ROOT:?}/calls.log"
+[[ -e "${GUEST_DIR:?}/pkg_fails" ]] && exit 1
+exit 0
