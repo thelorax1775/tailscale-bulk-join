@@ -128,6 +128,7 @@ sudo systemctl enable --now qemu-guest-agent
 
 ## Notes, caveats & troubleshooting
 
+- **Container configs with snapshots.** Proxmox keeps snapshots in the same `/etc/pve/lxc/<id>.conf`, under `[name]` headers. The script only reads and edits the live part, the lines before the first header: the TUN lines are inserted just above the first snapshot header (or at the end when there are none), and TUN lines that exist only inside a snapshot do not count as configured. Before the first edit it copies the config to `<id>.conf.bak-tailscale-bulk` next to it; that backup is made once and never overwritten.
 - **Unprivileged containers.** TUN bind-mounts frequently fail at runtime for unprivileged containers that lack a matching `lxc.idmap`. The script proceeds and warns you — **verify these manually** afterward. If a join fails on an unprivileged CT, that's the first thing to check.
 - **The `tun` module is host-wide.** If `tailscaled` runs but has "no control socket" or can't create the interface inside a guest, it's almost always because `/dev/net/tun` on the *host* wasn't backed by a loaded module. The script fixes this on the host up front.
 - **`--reset` is used on join.** Each fresh enroll runs `tailscale up --reset …`, which clears any previous, non-default `tailscale up` settings on that guest. This keeps enrollment deterministic; if you rely on per-guest flags, bake them into `TS_EXTRA_ARGS`.

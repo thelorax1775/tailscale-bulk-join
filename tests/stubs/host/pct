@@ -19,6 +19,13 @@ case "$sub" in
         [[ -d "$guest" && ! -e "$guest/down" ]] || exit 255
         cd "$guest" || exit 255
         export GUEST_DIR="$guest" GUEST_ID="$id"
+        if [[ -n "${FAKE_PCT_READS_STDIN:-}" ]]; then
+            # Like a command that slurps our stdin: read it all (before PATH
+            # is narrowed to the guest's), then hand it on.
+            data=$(cat)
+            export PATH="$guest/bin"
+            exec "$@" <<<"$data"
+        fi
         export PATH="$guest/bin"
         exec "$@"
         ;;

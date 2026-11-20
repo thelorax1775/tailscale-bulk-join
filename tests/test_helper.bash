@@ -186,3 +186,18 @@ assert_summary() {
     assert_output_has "Skipped : $2"
     assert_output_has "Failed  : $3"
 }
+
+# The `tailscale status` of the guest prints exactly this text (and succeeds).
+guest_status_out() {
+    guest_has_tailscale "$1"
+    printf '%s\n' "$2" > "$FAKE_ROOT/guests/$1/status_out"
+}
+
+# lxc_snapshot <vmid>: appends a snapshot section that carries the TUN lines.
+lxc_snapshot_with_tun() {
+    printf '\n[snap]\narch: amd64\n%s\n%s\nsnaptime: 1700000000\n' \
+        "$TUN_ALLOW_LINE" "$TUN_MOUNT_LINE" >> "$(lxc_conf "$1")"
+}
+
+# The fake pct reads all of its stdin, like a command that slurps its input.
+pct_reads_stdin() { export FAKE_PCT_READS_STDIN=1; }

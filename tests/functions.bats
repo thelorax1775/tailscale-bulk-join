@@ -97,3 +97,101 @@ setup() {
     assert_status 0
     assert_output_has "n=2"
 }
+
+# --- enable_tun_lxc and snapshot sections ------------------------------------
+
+snap_conf() {
+    printf 'arch: amd64\nhostname: web\nmemory: 512\n\n[snap]\narch: amd64\nmemory: 256\nsnaptime: 1700000000\n' > "$(lxc_conf "$1")"
+}
+
+@test "enable_tun_lxc: with a snapshot, the lines go before the first header and the snapshot is untouched" {
+    add_lxc 101 web
+    snap_conf 101
+    sed -n '/^\[snap\]/,$p' "$(lxc_conf 101)" > "$BATS_TEST_TMPDIR/snap-before"
+
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    sed -n '/^\[snap\]/,$p' "$(lxc_conf 101)" > "$BATS_TEST_TMPDIR/snap-after"
+    cmp "$BATS_TEST_TMPDIR/snap-before" "$BATS_TEST_TMPDIR/snap-after"
+
+    hdr="$(grep -n '^\[snap\]' "$(lxc_conf 101)" | cut -d: -f1)"
+    allow="$(grep -nFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)" | cut -d: -f1)"
+    mount="$(grep -nFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)" | cut -d: -f1)"
+    [[ -n "$allow" && -n "$mount" && "$allow" -lt "$hdr" && "$mount" -lt "$hdr" ]]
+    [[ "$(grep -cFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+    [[ "$(grep -cFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+
+    cp "$(lxc_conf 101)" "$BATS_TEST_TMPDIR/after-first"
+    run_fn enable_tun_lxc 101
+    assert_status 1
+    [[ -z "$output" ]]
+    cmp "$(lxc_conf 101)" "$BATS_TEST_TMPDIR/after-first"
+}
+
+@test "enable_tun_lxc: TUN lines that exist only inside a snapshot do not count" {
+    add_lxc 101 web
+    lxc_snapshot_with_tun 101
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    assert_output_has "[*] Enabling /dev/net/tun for CT 101"
+    hdr="$(grep -n '^\[snap\]' "$(lxc_conf 101)" | cut -d: -f1)"
+    allow="$(grep -nFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)" | head -n 1 | cut -d: -f1)"
+    [[ "$allow" -lt "$hdr" ]]
+    [[ "$(grep -cFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)")" -eq 2 ]]
+}
+
+@test "enable_tun_lxc: an unprivileged flag inside a snapshot does not make the live config unprivileged" {
+    add_lxc 101 web
+    printf '\n[snap]\nunprivileged: 1\n' >> "$(lxc_conf 101)"
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    refute_output_has "UNPRIVILEGED"
+}
+
+@test "enable_tun_lxc: writes <conf>.bak-tailscale-bulk once and never overwrites it" {
+    add_lxc 101 web
+    cp "$(lxc_conf 101)" "$BATS_TEST_TMPDIR/original"
+    bak="$(lxc_conf 101).bak-tailscale-bulk"
+    [[ ! -e "$bak" ]]
+
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    cmp "$bak" "$BATS_TEST_TMPDIR/original"
+
+    # A later edit (the TUN lines removed again by hand) must keep the first backup.
+    cp "$BATS_TEST_TMPDIR/original" "$(lxc_conf 101)"
+    echo 'memory: 1024' >> "$(lxc_conf 101)"
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    cmp "$bak" "$BATS_TEST_TMPDIR/original"
+}
+
+@test "enable_tun_lxc: no backup is made when nothing needs changing" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    run_fn enable_tun_lxc 101
+    assert_status 1
+    [[ ! -e "$(lxc_conf 101).bak-tailscale-bulk" ]]
+}
+
+# --- the "already joined" check ----------------------------------------------
+
+@test "is_lxc_tailscale_active: 192.100.5.5 is not a tailnet address, 100.64.0.7 is" {
+    add_lxc 101 web
+    guest_status_out 101 "192.100.5.5  host  user@  linux  -"
+    run_fn is_lxc_tailscale_active 101
+    [[ "$status" -ne 0 ]] || _fail "192.100.x.x must not count as joined"
+    guest_status_out 101 "100.64.0.7  host  user@  linux  -"
+    run_fn is_lxc_tailscale_active 101
+    assert_status 0
+}
+
+@test "is_vm_tailscale_active: 192.100.5.5 is not a tailnet address, 100.64.0.7 is" {
+    add_vm 201 db
+    guest_status_out 201 "192.100.5.5  host  user@  linux  -"
+    run_fn is_vm_tailscale_active 201
+    [[ "$status" -ne 0 ]] || _fail "192.100.x.x must not count as joined"
+    guest_status_out 201 "100.64.0.7  host  user@  linux  -"
+    run_fn is_vm_tailscale_active 201
+    assert_status 0
+}
