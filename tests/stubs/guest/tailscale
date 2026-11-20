@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Fake in-guest `tailscale`. State lives in $GUEST_DIR:
+#   status_out  if present, `status` prints it and succeeds
 #   joined    exists once the guest is "in the tailnet"
 #   up_plan   one line per future `tailscale up` call: "ok" joins, any other
 #             text is printed as the error and the call fails. When the plan
@@ -9,6 +10,11 @@ set -u
 
 case "${1:-}" in
     status)
+        # A test can pin the exact status text with $GUEST_DIR/status_out.
+        if [[ -e "$GUEST_DIR/status_out" ]]; then
+            printf '%s\n' "$(<"$GUEST_DIR/status_out")"
+            exit 0
+        fi
         if [[ -e "$GUEST_DIR/joined" ]]; then
             echo "100.64.0.$(( GUEST_ID % 250 + 1 ))  guest-$GUEST_ID  fake@  linux  -"
             exit 0

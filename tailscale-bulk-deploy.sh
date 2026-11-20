@@ -170,13 +170,13 @@ is_lxc_tailscale_active() {
     pct exec "$1" -- bash -c '
         command -v tailscale >/dev/null 2>&1 || exit 1
         tailscale status >/dev/null 2>&1 || exit 1
-        tailscale status 2>/dev/null | grep -q "100\."
+        tailscale status 2>/dev/null | grep -qE "(^|[^0-9.])100\.[0-9]+\.[0-9]+\.[0-9]+"
     ' >/dev/null 2>&1
 }
 
 lxc_is_privileged() {
     local conf="$LXC_CONF_DIR/$1.conf"
-    ! grep -q '^unprivileged:\s*1' "$conf" 2>/dev/null
+    ! lxc_live_config "$conf" | grep -q '^unprivileged:\s*1'
 }
 
 # Polls until a container responds to pct exec, up to timeout seconds.
@@ -192,11 +192,19 @@ wait_for_lxc_ready() {
     return 1
 }
 
+# Prints the live part of a container config: the lines before the first
+# "[name]" snapshot header.
+lxc_live_config() {
+    awk '/^\[/ { exit } { print }' "$1" 2>/dev/null
+}
+
 enable_tun_lxc() {
     local ct="$1"
     local conf="$LXC_CONF_DIR/${ct}.conf"
 
-    if grep -q 'lxc.cgroup2.devices.allow: c 10:200 rwm' "$conf" 2>/dev/null; then
+    # Only the live part of the config counts: from the first "[name]" header
+    # on, everything belongs to a snapshot and is neither read nor changed.
+    if lxc_live_config "$conf" | grep -qxF 'lxc.cgroup2.devices.allow: c 10:200 rwm'; then
         return 1   # already configured, nothing changed
     fi
 
@@ -208,13 +216,29 @@ enable_tun_lxc() {
         echo "    lxc.idmap entry. Proceeding, but verify manually afterward."
     fi
 
-    cat >> "$conf" <<'EOF'
+    # One backup, taken before the first edit and never overwritten.
+    if [[ ! -e "$conf.bak-tailscale-bulk" ]]; then
+        cp -p "$conf" "$conf.bak-tailscale-bulk" ||
+            echo "[!] Could not back up $conf to $conf.bak-tailscale-bulk"
+    fi
 
-# Tailscale requirement
-lxc.cgroup2.devices.allow: c 10:200 rwm
-lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
-EOF
-    return 0
+    # The new lines go in front of the first snapshot header, or at the end
+    # when the config has no snapshots.
+    local tmp rc
+    tmp=$(mktemp) || return 1
+    awk '
+        function emit() {
+            print "# Tailscale requirement"
+            print "lxc.cgroup2.devices.allow: c 10:200 rwm"
+            print "lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file"
+        }
+        /^\[/ && !done { emit(); print ""; done = 1 }
+        { print }
+        END { if (!done) { print ""; emit() } }
+    ' "$conf" > "$tmp" && cat "$tmp" > "$conf"
+    rc=$?
+    rm -f "$tmp"
+    return "$rc"
 }
 
 install_tailscale_lxc() {
@@ -437,7 +461,7 @@ is_vm_tailscale_active() {
     vm_guest_exec "$1" '
         command -v tailscale >/dev/null 2>&1 || exit 1
         tailscale status >/dev/null 2>&1 || exit 1
-        tailscale status 2>/dev/null | grep -q "100\."
+        tailscale status 2>/dev/null | grep -qE "(^|[^0-9.])100\.[0-9]+\.[0-9]+\.[0-9]+"
     '
 }
 
@@ -604,7 +628,9 @@ while IFS=$'\t' read -r CT STATUS NAME; do
     # `|| true` here is deliberate: a bug or unexpected failure inside
     # process_lxc should never be allowed to kill the whole scan again
     # (a single bad container previously aborted the entire run under set -e).
-    process_lxc "$CT" "$NAME" || echo "[X] Unexpected failure processing CT $CT — continuing with next container"
+    # </dev/null: nothing run for a guest may read the guest list this loop is
+    # reading, or the scan would silently stop after the first guest.
+    process_lxc "$CT" "$NAME" </dev/null || echo "[X] Unexpected failure processing CT $CT — continuing with next container"
 done < <(pvesh get "/nodes/$NODE/lxc" --output-format json | jq -r '.[] | [.vmid, .status, .name] | @tsv')
 
 echo
@@ -615,7 +641,7 @@ while IFS=$'\t' read -r VMID STATUS NAME; do
         inc SKIPPED
         continue
     fi
-    process_vm "$VMID" "$NAME" || echo "[X] Unexpected failure processing VM $VMID — continuing with next VM"
+    process_vm "$VMID" "$NAME" </dev/null || echo "[X] Unexpected failure processing VM $VMID — continuing with next VM"
 done < <(pvesh get "/nodes/$NODE/qemu" --output-format json | jq -r '.[] | [.vmid, .status, .name] | @tsv')
 
 echo

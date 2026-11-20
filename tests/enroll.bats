@@ -355,3 +355,19 @@ setup() {
     assert_calls 1 "guest 102: tailscale up"
     assert_summary 2 0 0
 }
+
+# --- one guest must not end the scan ------------------------------------------
+
+@test "a pct that reads stdin does not stop the scan: all 3 containers are processed" {
+    for id in 101 102 103; do
+        add_lxc "$id" "ct$id"
+        lxc_has_tun "$id"
+    done
+    pct_reads_stdin
+    run_script
+    assert_status 0
+    assert_summary 3 0 0
+    for id in 101 102 103; do
+        assert_calls 1 "guest $id: tailscale up"
+    done
+}
