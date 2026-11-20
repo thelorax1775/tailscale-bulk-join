@@ -83,3 +83,37 @@ setup() {
     assert_calls 0 "modprobe"
     assert_calls 0 "host apt"
 }
+
+@test "a host with /dev/net/tun present does not run modprobe or write tun.conf" {
+    run_script
+    assert_status 0
+    assert_calls 0 "modprobe"
+    [[ ! -e "$FAKE_ROOT/tun.conf" ]] || _fail "tun.conf should not exist"
+    refute_output_has "loading the tun module"
+}
+
+@test "a host without /dev/net/tun loads tun and persists it" {
+    # shellcheck disable=SC2030,SC2031  # bats runs each test in a subshell; export is intentional
+    export TS_BULK_TUN_DEV="$BATS_TEST_TMPDIR/no-tun"
+    run_script
+    assert_status 0
+    assert_calls 1 "modprobe tun"
+    assert_output_has "is missing on the host — loading the tun module"
+    # tun.conf should exist and contain exactly "tun"
+    [[ -f "$FAKE_ROOT/tun.conf" ]] || _fail "tun.conf should exist"
+    local content
+    content="$(cat "$FAKE_ROOT/tun.conf")"
+    [[ "$content" == "tun" ]] || _fail "tun.conf should contain exactly 'tun', got: $content"
+}
+
+@test "a failed modprobe stops the run before any guest is touched" {
+    add_lxc 101 web
+    # shellcheck disable=SC2030,SC2031  # bats runs each test in a subshell; export is intentional
+    export TS_BULK_TUN_DEV="$BATS_TEST_TMPDIR/no-tun"
+    export FAKE_MODPROBE_FAILS=1
+    run_script
+    assert_status 1
+    assert_output_has "[X] Could not load the tun module"
+    refute_output_has "Scanning LXC"
+    assert_calls 0 "pct"
+}

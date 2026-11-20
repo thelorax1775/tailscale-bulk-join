@@ -8,7 +8,7 @@
 #   fake/guests/<vmid>/             one dir per guest; bin/ is its whole PATH
 #   fake/calls.log                  every state-changing call the stubs saw
 #   fake/run.log                    the script's own log (TS_BULK_LOG)
-# The host commands (pct, qm, pvesh, lsmod, modprobe, sleep, apt) come from
+# The host commands (pct, qm, pvesh, modprobe, sleep, apt) come from
 # tests/stubs/host, put first on PATH.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,6 +45,8 @@ setup_fake_node() {
 
     export TS_BULK_LOG="$FAKE_ROOT/run.log"
     export TS_BULK_LXC_CONF_DIR="$FAKE_ROOT/lxc-conf"
+    export TS_BULK_TUN_DEV="/dev/null"
+    export TS_BULK_TUN_MODULES_CONF="$FAKE_ROOT/tun.conf"
     export TS_BULK_TEST_ONLY_SKIP_ROOT_CHECK=1
     export PVE_NODE="$FAKE_NODE"
     export TS_AUTHKEY="$FAKE_KEY"

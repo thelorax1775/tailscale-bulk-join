@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Fake `lsmod`: reports tun as loaded, so the script never reaches
-# `modprobe tun` or the write to /etc/modules-load.d.
-echo "Module                  Size  Used by"
-echo "tun                    69632  2"
