@@ -12,6 +12,7 @@ guest="$FAKE_ROOT/guests/$id"
 
 case "$sub" in
     exec)
+        printf 'pct %s\n' "$*" >> "$FAKE_ROOT/argv.log"
         shift 2
         [[ "${1:-}" == "--" ]] && shift
         # A guest that is missing or marked down does not answer pct exec.

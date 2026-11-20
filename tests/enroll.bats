@@ -260,3 +260,98 @@ setup() {
     assert_calls 2 "tailscale up"
     assert_calls 0 "guest 103:"
 }
+
+# --- the auth key never leaks -----------------------------------------------
+
+@test "LXC: a tailscale error that echoes the key does not put it in the output or the log" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    guest_has_tailscale 101
+    guest_up_plan 101 "Error: changing settings via 'tailscale up' requires mentioning all non-default flags. Command: @ECHO@" ok
+    run_script
+    assert_status 0
+    assert_output_has "[redacted-key]"
+    assert_output_has "[+] Joined tailnet after reboot"
+    refute_output_has "tskey-"
+    if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
+@test "VM: a tailscale error that echoes the key does not put it in the output or the log" {
+    add_vm 201 db
+    guest_has_tailscale 201
+    guest_up_plan 201 "Error: requires mentioning all non-default flags. Command: @ECHO@" ok
+    run_script
+    assert_status 0
+    assert_output_has "[redacted-key]"
+    refute_output_has "tskey-"
+    if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
+@test "LXC: a key in the tailscaled journal after a failed join is redacted" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    guest_has_tailscale 101
+    guest_up_plan 101 "some failure" "some failure"
+    printf 'tailscaled: auth %s\n' "$FAKE_KEY" > "$FAKE_ROOT/guests/101/journal_extra"
+    run_script
+    assert_output_has "fake tailscaled journal for guest 101"
+    assert_output_has "[redacted-key]"
+    refute_output_has "tskey-"
+    if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
+@test "VM: a key in the tailscaled journal after a failed join is redacted" {
+    add_vm 201 db
+    guest_has_tailscale 201
+    guest_up_plan 201 "some failure" "some failure"
+    printf 'tailscaled: auth %s\n' "$FAKE_KEY" > "$FAKE_ROOT/guests/201/journal_extra"
+    run_script
+    assert_output_has "fake tailscaled journal for guest 201"
+    assert_output_has "[redacted-key]"
+    refute_output_has "tskey-"
+    if grep -q "tskey-" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
+@test "a key that does not look like tskey-... is redacted too" {
+    export TS_AUTHKEY="plainsecret123"
+    add_lxc 101 web
+    lxc_has_tun 101
+    guest_has_tailscale 101
+    guest_up_plan 101 "bad things: @ECHO@" ok
+    run_script
+    refute_output_has "plainsecret123"
+    if grep -q "plainsecret123" "$TS_BULK_LOG"; then _fail "secret found in $TS_BULK_LOG"; fi
+}
+
+@test "the key is not in any pct or qm command line, only the guest's own tailscale call" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    add_vm 201 db
+    run_script
+    assert_status 0
+    assert_summary 2 0 0
+    [[ -s "$FAKE_ROOT/argv.log" ]]
+    if grep -qF -- "$FAKE_KEY" "$FAKE_ROOT/argv.log"; then _fail "secret found in $FAKE_ROOT/argv.log"; fi
+    # ...and it still reached tailscale inside both guests.
+    assert_calls 1 "guest 101: tailscale up --reset --authkey $FAKE_KEY"
+    assert_calls 1 "guest 201: tailscale up --reset --authkey $FAKE_KEY"
+}
+
+# --- network errors that mention the key are not key rejections -------------
+
+@test "a network error mentioning authkey does not stop the run: later guests are tried and the retry happens" {
+    add_lxc 101 first
+    lxc_has_tun 101
+    guest_has_tailscale 101
+    guest_up_plan 101 "dial tcp: i/o timeout while validating authkey" ok
+    add_lxc 102 second
+    lxc_has_tun 102
+    run_script
+    assert_status 0
+    refute_output_has "rejected the auth key"
+    refute_output_has "Skipping enroll"
+    assert_output_has "[*] Join failed — rebooting CT 101 and retrying once"
+    assert_calls 1 "pct reboot 101"
+    assert_calls 1 "guest 102: tailscale up"
+    assert_summary 2 0 0
+}

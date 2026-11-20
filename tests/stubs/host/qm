@@ -18,9 +18,15 @@ case "${1:-} ${2:-}" in
         ;;
     "guest exec")
         id="${3:-}"
+        printf 'qm %s\n' "$*" >> "$FAKE_ROOT/argv.log"
         guest="$FAKE_ROOT/guests/$id"
         shift 3
-        while [[ $# -gt 0 && "$1" != "--" ]]; do shift; done
+        # Like real qm: the guest sees our stdin only with `--pass-stdin 1`.
+        pass_stdin=0
+        while [[ $# -gt 0 && "$1" != "--" ]]; do
+            [[ "$1" == "--pass-stdin" && "${2:-}" == "1" ]] && pass_stdin=1
+            shift
+        done
         [[ "${1:-}" == "--" ]] && shift
         [[ -e "$guest/agent" ]] || { echo "QEMU guest agent is not running" >&2; exit 1; }
 
@@ -30,7 +36,11 @@ case "${1:-} ${2:-}" in
             cd "$guest" || exit 255
             export GUEST_DIR="$guest" GUEST_ID="$id"
             export PATH="$guest/bin"
-            exec "$@" 2>"$errfile"
+            if [[ "$pass_stdin" == 1 ]]; then
+                exec "$@" 2>"$errfile"
+            else
+                exec "$@" 2>"$errfile" </dev/null
+            fi
         ) || rc=$?
         err=$(<"$errfile")
 

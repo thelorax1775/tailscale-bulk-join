@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 # Fake in-guest `journalctl`: one recognisable line for the diagnostics block.
 echo "fake tailscaled journal for guest ${GUEST_ID:?}"
+# A test can plant extra journal text (e.g. a leaked key) in $GUEST_DIR/journal_extra.
+[[ -r "$GUEST_DIR/journal_extra" ]] && printf '%s\n' "$(<"$GUEST_DIR/journal_extra")"
