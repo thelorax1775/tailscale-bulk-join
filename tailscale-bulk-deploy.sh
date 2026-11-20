@@ -48,13 +48,17 @@ esac
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-# The two paths below can be overridden from the environment. The defaults
+# The paths below can be overridden from the environment. The defaults
 # are what every real run uses; the overrides exist so the test suite
 # (tests/*.bats) can run the script against a temp dir instead of the host.
-#   TS_BULK_LOG            Log file path.
-#   TS_BULK_LXC_CONF_DIR   Directory holding the <vmid>.conf container configs.
+#   TS_BULK_LOG                 Log file path.
+#   TS_BULK_LXC_CONF_DIR        Directory holding the <vmid>.conf container configs.
+#   TS_BULK_TUN_DEV             Host TUN device to check (default /dev/net/tun).
+#   TS_BULK_TUN_MODULES_CONF    Where to persist the tun module (default /etc/modules-load.d/tun.conf).
 LOG="${TS_BULK_LOG:-/root/tailscale-bulk-$(date +%F_%H-%M-%S).log}"
 LXC_CONF_DIR="${TS_BULK_LXC_CONF_DIR:-/etc/pve/lxc}"
+TUN_DEV="${TS_BULK_TUN_DEV:-/dev/net/tun}"
+TUN_MODULES_CONF="${TS_BULK_TUN_MODULES_CONF:-/etc/modules-load.d/tun.conf}"
 AUTH_KEY="${TS_AUTHKEY:-}"
 NODE="${PVE_NODE:-$(hostname -s)}"
 EXTRA_ARGS="${TS_EXTRA_ARGS:-}"
@@ -122,11 +126,18 @@ fi
 # The most common cause of "tailscaled running but socket missing" is that
 # the tun kernel module was never loaded on the Proxmox HOST, so there's
 # nothing valid for any container's bind mount to point at, no matter how
-# many times the container itself is restarted.
-if ! lsmod | grep -qw '^tun'; then
-    echo "[!] tun kernel module not loaded on host — loading it now"
-    modprobe tun
-    echo tun > /etc/modules-load.d/tun.conf   # persist across host reboots
+# many times the container itself is restarted. On Proxmox VE the kernel
+# normally has tun built in, so /dev/net/tun already exists. We only load
+# and persist the module when the device is missing.
+if [[ ! -c "$TUN_DEV" ]]; then
+    echo "[!] $TUN_DEV is missing on the host — loading the tun module"
+    if ! modprobe tun; then
+        echo "[X] Could not load the tun module (modprobe tun failed). Aborting."
+        exit 1
+    fi
+    if ! echo tun > "$TUN_MODULES_CONF"; then
+        echo "[!] Could not write $TUN_MODULES_CONF; tun may not load after a host reboot"
+    fi
 fi
 
 # Safe counter increment. `((x++))` returns a *false* exit status when x is

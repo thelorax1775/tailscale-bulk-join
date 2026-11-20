@@ -11,7 +11,7 @@
 - **Covers both LXC containers and QEMU/KVM VMs** on the node.
 - **Idempotent** — already-connected guests are detected and skipped; safe to re-run.
 - **Auto-configures `/dev/net/tun`** for containers (adds the cgroup allow + bind mount to the container config and reboots once when needed).
-- **Loads the `tun` kernel module on the host** and persists it across reboots — the single most common reason Tailscale silently fails inside containers.
+- **Checks for `/dev/net/tun` on the host** and only loads (and persists) the `tun` module when it is missing — on Proxmox VE the kernel normally has `tun` built in, so the device already exists.
 - **Multi-distro guest support** — installs prerequisites via `apt`, `apk`, `dnf`, or `yum`.
 - **Automatic retry** — if the first join fails (a known `tailscaled` startup race), the guest is rebooted and the join is retried once.
 - **Fails fast on a bad auth key** — if the control server *rejects* the key (invalid, expired, or a single-use key already consumed), the script recognizes it, skips the pointless reboot-and-retry, and stops attempting further enrolls instead of rebooting the rest of your fleet against a dead key.
@@ -92,7 +92,7 @@ Show the built-in help:
 
 ## What it does, step by step
 
-1. **Preflight** — verifies it's running as root on a Proxmox node, that `TS_AUTHKEY` is set, ensures `jq` is present, and loads/persists the `tun` kernel module on the host.
+1. **Preflight** — verifies it's running as root on a Proxmox node, that `TS_AUTHKEY` is set, ensures `jq` is present, and checks that `/dev/net/tun` exists on the host (loading and persisting the `tun` kernel module only when it is missing; on Proxmox VE the kernel normally has `tun` built in).
 2. **Scan LXC containers** (`pvesh get /nodes/<node>/lxc`). For each *running* container:
    - Skip if Tailscale is already up and has a `100.x` address.
    - Ensure `/dev/net/tun` is exposed to the container (edit config + reboot once if it wasn't).
@@ -130,7 +130,7 @@ sudo systemctl enable --now qemu-guest-agent
 
 - **Container configs with snapshots.** Proxmox keeps snapshots in the same `/etc/pve/lxc/<id>.conf`, under `[name]` headers. The script only reads and edits the live part, the lines before the first header: the TUN lines are inserted just above the first snapshot header (or at the end when there are none), and TUN lines that exist only inside a snapshot do not count as configured. Before the first edit it copies the config to `<id>.conf.bak-tailscale-bulk` next to it; that backup is made once and never overwritten.
 - **Unprivileged containers.** TUN bind-mounts frequently fail at runtime for unprivileged containers that lack a matching `lxc.idmap`. The script proceeds and warns you — **verify these manually** afterward. If a join fails on an unprivileged CT, that's the first thing to check.
-- **The `tun` module is host-wide.** If `tailscaled` runs but has "no control socket" or can't create the interface inside a guest, it's almost always because `/dev/net/tun` on the *host* wasn't backed by a loaded module. The script fixes this on the host up front.
+- **The script checks for `/dev/net/tun` on the host and only loads the `tun` module when the device is missing.** On Proxmox VE the kernel normally has `tun` built in, so `/dev/net/tun` already exists and no action is needed. If the device is missing, the script attempts to load the module and persists it to `/etc/modules-load.d/tun.conf` so it survives a host reboot.
 - **`--reset` is used on join.** Each fresh enroll runs `tailscale up --reset …`, which clears any previous, non-default `tailscale up` settings on that guest. This keeps enrollment deterministic; if you rely on per-guest flags, bake them into `TS_EXTRA_ARGS`.
 - **Auth key visibility.** The key is sent to each guest on **stdin** (`pct exec` / `qm guest exec --pass-stdin`), so it is not in the command line of any process on the Proxmox host. Inside the guest it is an argument of the `tailscale up` process while that runs, so a root user in the guest could see it in `ps` for those few seconds. Everything the guests print is passed through a filter that replaces the key and anything shaped like `tskey-…` before it reaches the screen or the log, so the key is **not** written to the log file. Prefer short-lived / reusable keys and rotate them after a bulk run.
 - **Logs.** Every run is teed to `/root/tailscale-bulk-<timestamp>.log`. Failed joins include the last 15 lines of the guest's `tailscaled` journal to speed up diagnosis.
@@ -147,7 +147,7 @@ This script modifies guest configurations (container `.conf` files), reboots gue
 
 ## Project status
 
-Feature-complete single-script tool, last changed July 2026. The repository was previously named `TailAdjuster`.
+Feature-complete single-script tool, maintained with tests and CI since November 2026. The repository was previously named `TailAdjuster`.
 
 **Tests and CI.** Every pull request and every push to `main` runs `bash -n`, [ShellCheck](https://www.shellcheck.net/) and a [bats](https://github.com/bats-core/bats-core) test suite on GitHub Actions (`.github/workflows/ci.yml`). The suite in `tests/` runs the real script against a fake node: `pct`, `qm`, `pvesh` and the in-guest commands (`tailscale`, `apt`/`apk`/`dnf`/`yum`, `curl`, `systemctl`) are stubs from `tests/stubs/`, and everything it writes goes to a temp dir. It covers the auth-key error detection and fail-fast, the skip rules, the reboot-and-retry-once flow, the TUN config edit, the counters and summary, and `--help`.
 
@@ -160,7 +160,7 @@ shellcheck tailscale-bulk-deploy.sh tests/*.bash tests/*.bats tests/stubs/host/*
 bats tests
 ```
 
-The suite points the script at its temp dir with `TS_BULK_LOG` (log file path) and `TS_BULK_LXC_CONF_DIR` (container config directory), and skips the root check with `TS_BULK_TEST_ONLY_SKIP_ROOT_CHECK=1`. These exist for the tests; leave them unset on a real node, where the defaults (`/root/tailscale-bulk-<timestamp>.log`, `/etc/pve/lxc`, root required) apply.
+The suite points the script at its temp dir with `TS_BULK_LOG` (log file path), `TS_BULK_LXC_CONF_DIR` (container config directory), `TS_BULK_TUN_DEV` (host TUN device to check), and `TS_BULK_TUN_MODULES_CONF` (where to persist the tun module), and skips the root check with `TS_BULK_TEST_ONLY_SKIP_ROOT_CHECK=1`. These exist for the tests; leave them unset on a real node, where the defaults (`/root/tailscale-bulk-<timestamp>.log`, `/etc/pve/lxc`, `/dev/net/tun`, `/etc/modules-load.d/tun.conf`, root required) apply.
 
 Related: [tailscale-mullvad-bulk-deploy](https://github.com/thelorax1775/tailscale-mullvad-bulk-deploy) reuses this script's Proxmox scan/enroll pattern and additionally deploys a Mullvad exit-node kill-switch on each guest. Use this repo when you only want guests joined to the tailnet.
 

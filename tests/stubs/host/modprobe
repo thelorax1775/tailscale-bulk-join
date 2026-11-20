@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
-# Fake `modprobe`: only records that it was called. With the fake lsmod it
-# should never be reached; the log line makes it visible if it is.
+# Fake `modprobe`: records that it was called. Exits 1 if FAKE_MODPROBE_FAILS=1.
 printf 'modprobe %s\n' "$*" >> "${FAKE_ROOT:?}/calls.log"
+if [[ "${FAKE_MODPROBE_FAILS:-0}" == "1" ]]; then
+    exit 1
+fi
