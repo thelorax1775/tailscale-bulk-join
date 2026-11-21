@@ -6,6 +6,11 @@
 set -u
 : "${FAKE_ROOT:?}" "${GUEST_DIR:?}" "${GUEST_ID:?}" "${STUB_GUEST_DIR:?}" "${STUB_LN:?}"
 
+# If called with -c, exec the real POSIX sh (dash on Ubuntu CI and this host)
+if [[ "${1:-}" == "-c" ]]; then
+    exec /bin/sh "$@"
+fi
+
 input=$(</dev/stdin)
 if [[ "$input" != *"fake tailscale installer"* ]]; then
     printf 'guest %s: sh UNEXPECTED input\n' "$GUEST_ID" >> "$FAKE_ROOT/calls.log"

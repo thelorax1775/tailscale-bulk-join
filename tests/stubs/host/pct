@@ -19,6 +19,11 @@ case "$sub" in
         [[ -d "$guest" && ! -e "$guest/down" ]] || exit 255
         cd "$guest" || exit 255
         export GUEST_DIR="$guest" GUEST_ID="$id"
+        # If the guest is marked as having no bash and the command is bash, fail
+        if [[ -e "$guest/no_bash" && "${1:-}" == "bash" ]]; then
+            echo "exec: bash: not found" >&2
+            exit 127
+        fi
         if [[ -n "${FAKE_PCT_READS_STDIN:-}" ]]; then
             # Like a command that slurps our stdin: read it all (before PATH
             # is narrowed to the guest's), then hand it on.
