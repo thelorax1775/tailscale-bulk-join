@@ -133,3 +133,27 @@ check_install() {
     assert_calls 0 "installer"
     assert_calls 2 "tailscale up"
 }
+
+@test "install: Alpine LXC and VM with no bash are enrolled via sh" {
+    add_lxc 101 alp running apk
+    guest_no_bash 101
+    add_vm 201 alpvm running apk
+    guest_no_bash 201
+    run_script
+    assert_status 0
+    assert_summary 2 0 0
+    assert_calls 1 "guest 101: apk add"
+    assert_calls 1 "guest 201: apk add"
+    refute_output_has "bash: not found"
+}
+
+@test "install: already-joined LXC with no bash is skipped" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    guest_joined 101
+    guest_no_bash 101
+    run_script
+    assert_status 0
+    assert_summary 0 1 0
+    refute_output_has "bash: not found"
+}

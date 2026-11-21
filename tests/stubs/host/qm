@@ -30,6 +30,12 @@ case "${1:-} ${2:-}" in
         [[ "${1:-}" == "--" ]] && shift
         [[ -e "$guest/agent" ]] || { echo "QEMU guest agent is not running" >&2; exit 1; }
 
+        # If the guest is marked as having no bash and the command is bash, fail
+        if [[ -e "$guest/no_bash" && "${1:-}" == "bash" ]]; then
+            jq -n '{exitcode:127, exited:1, "err-data":"bash: not found\n"}'
+            exit 0
+        fi
+
         errfile="$guest/.stderr"
         rc=0
         out=$(

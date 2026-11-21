@@ -178,7 +178,7 @@ redact() {
 # ---------------------------------------------------------------------------
 
 is_lxc_tailscale_active() {
-    pct exec "$1" -- bash -c '
+    pct exec "$1" -- sh -c '
         command -v tailscale >/dev/null 2>&1 || exit 1
         tailscale status >/dev/null 2>&1 || exit 1
         tailscale status 2>/dev/null | grep -qE "(^|[^0-9.])100\.[0-9]+\.[0-9]+\.[0-9]+"
@@ -262,7 +262,7 @@ enable_tun_lxc() {
 
 install_tailscale_lxc() {
     local ct="$1"
-    pct exec "$ct" -- bash -c '
+    pct exec "$ct" -- sh -c '
         set -e
         if command -v tailscale >/dev/null 2>&1; then
             echo "[+] Tailscale already installed"
@@ -299,7 +299,7 @@ join_tailnet_lxc() {
     # tailscale can be installed but tailscaled not actually running
     # (seen on CTs where it was installed in an earlier pass and the
     # service never came up). Make sure it's running before trying to join.
-    pct exec "$ct" -- bash -c 'systemctl enable --now tailscaled >/dev/null 2>&1' || true
+    pct exec "$ct" -- sh -c 'systemctl enable --now tailscaled >/dev/null 2>&1' || true
 
     echo "[*] Joining tailnet (fresh enroll) as '$hostname'"
 
@@ -310,7 +310,7 @@ join_tailnet_lxc() {
     # The key goes in on stdin, never in the pct/bash command line (which any
     # user on the host can read with ps). It is only an argument of the
     # `tailscale up` process inside the guest.
-    if out=$(printf '%s\n' "$AUTH_KEY" | pct exec "$ct" -- bash -c "
+    if out=$(printf '%s\n' "$AUTH_KEY" | pct exec "$ct" -- sh -c "
         IFS= read -r key
         tailscale up --reset --authkey \"\$key\" --hostname '$hostname' $EXTRA_ARGS
     " 2>&1); then
@@ -463,7 +463,7 @@ wait_for_vm_agent() {
     return 1
 }
 
-# Runs a bash command inside the VM guest via the QEMU agent.
+# Runs a sh command inside the VM guest via the QEMU agent.
 # Returns success/failure based on the guest's exit code. If print_output
 # is "print", also echoes the guest's stdout (used for diagnostics).
 vm_guest_exec() {
@@ -472,7 +472,7 @@ vm_guest_exec() {
     local -a qm_opts=(--timeout 60)
     [[ "$pass_stdin" == "stdin" ]] && qm_opts+=(--pass-stdin 1)
 
-    json=$(qm guest exec "$vmid" "${qm_opts[@]}" -- bash -c "$cmd" 2>/dev/null) || return 1
+    json=$(qm guest exec "$vmid" "${qm_opts[@]}" -- sh -c "$cmd" 2>/dev/null) || return 1
     exitcode=$(echo "$json" | jq -r '.exitcode // 1')
 
     if [[ "$print_output" == "print" ]]; then

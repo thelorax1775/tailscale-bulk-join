@@ -124,6 +124,9 @@ guest_up_plan() {
 # guest_flag <vmid> <flag>: pkg_fails, curl_fails, install_fails, reboot_fails, down
 guest_flag() { : > "$FAKE_ROOT/guests/$1/$2"; }
 
+# guest_no_bash <vmid>: marks a guest as having no bash (for Alpine testing)
+guest_no_bash() { : > "$FAKE_ROOT/guests/$1/no_bash"; }
+
 run_script() {
     run bash "$SCRIPT" "$@"
 }
