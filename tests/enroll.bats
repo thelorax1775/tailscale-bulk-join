@@ -371,3 +371,37 @@ setup() {
         assert_calls 1 "guest $id: tailscale up"
     done
 }
+
+# --- TUN config write failure ------------------------------------------------
+
+@test "LXC: config write failure (chmod 444) is reported as failed, no install, no join, no reboot" {
+    [[ $EUID -ne 0 ]] || skip "root ignores file permissions"
+    add_lxc 101 web
+    chmod 444 "$(lxc_conf 101)"
+    run_script
+    assert_status 0
+    assert_output_has "[X] Could not edit"
+    assert_output_has "[X] TUN setup failed for CT 101"
+    assert_summary 0 0 1
+    assert_calls 0 "tailscale up"
+    assert_calls 0 "pct reboot"
+    # no guest 101: apt call
+    if grep -qF "guest 101: apt" "$FAKE_ROOT/calls.log"; then
+        _fail "guest 101: apt should not be called"
+    fi
+}
+
+@test "LXC: config write failure on CT 101 does not stop CT 102 from joining" {
+    [[ $EUID -ne 0 ]] || skip "root ignores file permissions"
+    add_lxc 101 web
+    chmod 444 "$(lxc_conf 101)"
+    add_lxc 102 web2
+    run_script
+    assert_status 0
+    assert_output_has "[X] Could not edit"
+    assert_output_has "[X] TUN setup failed for CT 101"
+    assert_output_has "[+] Joined tailnet"
+    assert_summary 1 0 1
+    assert_calls 1 "guest 102: tailscale up"
+    assert_calls 1 "pct reboot 102"
+}
