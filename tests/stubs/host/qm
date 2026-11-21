@@ -61,6 +61,7 @@ case "${1:-} ${2:-}" in
     reboot\ *)
         log "qm reboot $2"
         [[ -e "$FAKE_ROOT/guests/$2/reboot_fails" ]] && exit 1
+        [[ -e "$FAKE_ROOT/guests/$2/down_after_reboot" ]] && rm -f "$FAKE_ROOT/guests/$2/agent"
         exit 0
         ;;
     *)

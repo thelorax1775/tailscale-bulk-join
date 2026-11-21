@@ -121,7 +121,7 @@ guest_up_plan() {
     printf '%s\n' "$@" > "$FAKE_ROOT/guests/$id/up_plan"
 }
 
-# guest_flag <vmid> <flag>: pkg_fails, curl_fails, install_fails, reboot_fails, down
+# guest_flag <vmid> <flag>: pkg_fails, curl_fails, install_fails, reboot_fails, down, down_after_reboot
 guest_flag() { : > "$FAKE_ROOT/guests/$1/$2"; }
 
 # guest_no_bash <vmid>: marks a guest as having no bash (for Alpine testing)

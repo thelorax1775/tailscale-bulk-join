@@ -37,6 +37,7 @@ case "$sub" in
     reboot)
         printf 'pct reboot %s\n' "$id" >> "$FAKE_ROOT/calls.log"
         [[ -e "$guest/reboot_fails" ]] && exit 1
+        [[ -e "$guest/down_after_reboot" ]] && : > "$guest/down"
         exit 0
         ;;
     *)
