@@ -174,6 +174,31 @@ snap_conf() {
     [[ ! -e "$(lxc_conf 101).bak-tailscale-bulk" ]]
 }
 
+@test "enable_tun_lxc: config write failure (chmod 444) returns 3 and prints error" {
+    [[ $EUID -ne 0 ]] || skip "root ignores file permissions"
+    add_lxc 101 web
+    chmod 444 "$(lxc_conf 101)"
+    run_fn enable_tun_lxc 101
+    assert_status 3
+    assert_output_has "[X] Could not edit"
+}
+
+@test "enable_tun_lxc: already configured returns 1" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    run_fn enable_tun_lxc 101
+    assert_status 1
+}
+
+@test "enable_tun_lxc: fresh config returns 0 and adds TUN lines" {
+    add_lxc 101 web
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    assert_output_has "[*] Enabling /dev/net/tun for CT 101"
+    [[ "$(grep -cFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+    [[ "$(grep -cFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+}
+
 # --- the "already joined" check ----------------------------------------------
 
 @test "is_lxc_tailscale_active: 192.100.5.5 is not a tailnet address, 100.64.0.7 is" {

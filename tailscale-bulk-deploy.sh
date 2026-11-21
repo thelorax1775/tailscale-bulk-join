@@ -215,6 +215,10 @@ enable_tun_lxc() {
 
     # Only the live part of the config counts: from the first "[name]" header
     # on, everything belongs to a snapshot and is neither read nor changed.
+    # Returns:
+    #   0 = TUN lines added (config changed)
+    #   1 = already configured (TUN lines already present in live config)
+    #   3 = could not edit config (mktemp or write failure)
     if lxc_live_config "$conf" | grep -qxF 'lxc.cgroup2.devices.allow: c 10:200 rwm'; then
         return 1   # already configured, nothing changed
     fi
@@ -236,7 +240,7 @@ enable_tun_lxc() {
     # The new lines go in front of the first snapshot header, or at the end
     # when the config has no snapshots.
     local tmp rc
-    tmp=$(mktemp) || return 1
+    tmp=$(mktemp) || { echo "[X] Could not edit $conf"; return 3; }
     awk '
         function emit() {
             print "# Tailscale requirement"
@@ -249,7 +253,11 @@ enable_tun_lxc() {
     ' "$conf" > "$tmp" && cat "$tmp" > "$conf"
     rc=$?
     rm -f "$tmp"
-    return "$rc"
+    if [[ $rc -ne 0 ]]; then
+        echo "[X] Could not edit $conf"
+        return 3
+    fi
+    return 0
 }
 
 install_tailscale_lxc() {
@@ -348,9 +356,16 @@ process_lxc() {
     fi
 
     local modified=0
-    if enable_tun_lxc "$ct"; then
+    local trc=0
+    enable_tun_lxc "$ct" || trc=$?
+    if [[ $trc -eq 0 ]]; then
         modified=1
+    elif [[ $trc -eq 3 ]]; then
+        echo "[X] TUN setup failed for CT $ct"
+        inc FAILED
+        return
     fi
+    # trc == 1 means already configured; carry on as today.
 
     if ! install_tailscale_lxc "$ct"; then
         echo "[X] Install failed"
