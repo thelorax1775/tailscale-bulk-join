@@ -630,6 +630,10 @@ process_vm() {
 # ---------------------------------------------------------------------------
 
 echo "[*] Scanning LXC containers on node '$NODE'..."
+if ! lxc_list=$(pvesh get "/nodes/$NODE/lxc" --output-format json); then
+    echo "[X] Could not list containers on node '$NODE'. Is PVE_NODE right? (see the pvesh error above)"
+    exit 1
+fi
 while IFS=$'\t' read -r CT STATUS NAME; do
     if [[ "$STATUS" != "running" ]]; then
         echo "[SKIP] CT $CT ($NAME) not running"
@@ -642,10 +646,14 @@ while IFS=$'\t' read -r CT STATUS NAME; do
     # </dev/null: nothing run for a guest may read the guest list this loop is
     # reading, or the scan would silently stop after the first guest.
     process_lxc "$CT" "$NAME" </dev/null || echo "[X] Unexpected failure processing CT $CT — continuing with next container"
-done < <(pvesh get "/nodes/$NODE/lxc" --output-format json | jq -r '.[] | [.vmid, .status, .name] | @tsv')
+done < <(jq -r '.[] | [.vmid, .status, .name] | @tsv' <<<"$lxc_list")
 
 echo
 echo "[*] Scanning VMs on node '$NODE'..."
+if ! vm_list=$(pvesh get "/nodes/$NODE/qemu" --output-format json); then
+    echo "[X] Could not list VMs on node '$NODE'. Is PVE_NODE right? (see the pvesh error above)"
+    exit 1
+fi
 while IFS=$'\t' read -r VMID STATUS NAME; do
     if [[ "$STATUS" != "running" ]]; then
         echo "[SKIP] VM $VMID ($NAME) not running"
@@ -653,7 +661,7 @@ while IFS=$'\t' read -r VMID STATUS NAME; do
         continue
     fi
     process_vm "$VMID" "$NAME" </dev/null || echo "[X] Unexpected failure processing VM $VMID — continuing with next VM"
-done < <(pvesh get "/nodes/$NODE/qemu" --output-format json | jq -r '.[] | [.vmid, .status, .name] | @tsv')
+done < <(jq -r '.[] | [.vmid, .status, .name] | @tsv' <<<"$vm_list")
 
 echo
 echo "======================================="

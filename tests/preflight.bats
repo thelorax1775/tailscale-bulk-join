@@ -117,3 +117,22 @@ setup() {
     refute_output_has "Scanning LXC"
     assert_calls 0 "pct"
 }
+
+@test "pvesh fails to list LXC containers: exits 1 with clear error and no tailscale up calls" {
+    add_lxc 101 web
+    export PVE_NODE=wrongnode
+    run_script
+    assert_status 1
+    assert_output_has "[X] Could not list containers on node 'wrongnode'"
+    refute_output_has "DONE"
+    assert_calls 0 "tailscale up"
+}
+
+@test "pvesh lists LXC but fails to list VMs: exits 1 with clear VM error" {
+    add_lxc 101 web
+    add_vm 201 vm-web
+    export FAKE_PVESH_FAIL_QEMU=1
+    run_script
+    assert_status 1
+    assert_output_has "[X] Could not list VMs on node 'testnode'"
+}

@@ -13,7 +13,12 @@ fi
 if [[ "${1:-}" == "get" && "${3:-} ${4:-}" == "--output-format json" ]]; then
     case "${2:-}" in
         "/nodes/${FAKE_NODE:-testnode}/lxc")  exec cat "$FAKE_ROOT/lxc.json" ;;
-        "/nodes/${FAKE_NODE:-testnode}/qemu") exec cat "$FAKE_ROOT/qemu.json" ;;
+        "/nodes/${FAKE_NODE:-testnode}/qemu")
+            if [[ "${FAKE_PVESH_FAIL_QEMU:-0}" == "1" ]]; then
+                echo "fake pvesh: hostname lookup 'testnode' failed" >&2
+                exit 2
+            fi
+            exec cat "$FAKE_ROOT/qemu.json" ;;
     esac
 fi
 printf 'pvesh UNEXPECTED %s\n' "$*" >> "$FAKE_ROOT/calls.log"
