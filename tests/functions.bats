@@ -199,6 +199,54 @@ snap_conf() {
     [[ "$(grep -cFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)")" -eq 1 ]]
 }
 
+@test "enable_tun_lxc: Proxmox devN passthrough dev0: /dev/net/tun counts as configured" {
+    add_lxc 101 web
+    printf 'dev0: /dev/net/tun\n' >> "$(lxc_conf 101)"
+    local conf_before
+    conf_before=$(cat "$(lxc_conf 101)")
+    run_fn enable_tun_lxc 101
+    assert_status 1
+    [[ -z "$output" ]]
+    cmp "$(lxc_conf 101)" <(cat <<<"$conf_before")
+}
+
+@test "enable_tun_lxc: Proxmox devN passthrough dev2: path=/dev/net/tun,mode=0666 counts as configured" {
+    add_lxc 101 web
+    printf 'dev2: path=/dev/net/tun,mode=0666\n' >> "$(lxc_conf 101)"
+    local conf_before
+    conf_before=$(cat "$(lxc_conf 101)")
+    run_fn enable_tun_lxc 101
+    assert_status 1
+    [[ -z "$output" ]]
+    cmp "$(lxc_conf 101)" <(cat <<<"$conf_before")
+}
+
+@test "enable_tun_lxc: devN line only inside a snapshot does not count" {
+    add_lxc 101 web
+    printf '\n[snap1]\ndev0: /dev/net/tun\n' >> "$(lxc_conf 101)"
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    assert_output_has "[*] Enabling /dev/net/tun for CT 101"
+    # The TUN lines should be added BEFORE the snapshot header
+    local hdr allow mount
+    hdr=$(grep -n '^\[snap1\]' "$(lxc_conf 101)" | cut -d: -f1)
+    allow=$(grep -nFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)" | head -n 1 | cut -d: -f1)
+    mount=$(grep -nFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)" | head -n 1 | cut -d: -f1)
+    [[ -n "$allow" && -n "$mount" && "$allow" -lt "$hdr" && "$mount" -lt "$hdr" ]]
+    [[ "$(grep -cFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+    [[ "$(grep -cFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+}
+
+@test "enable_tun_lxc: dev1: /dev/net/tunx is not treated as TUN" {
+    add_lxc 101 web
+    printf 'dev1: /dev/net/tunx\n' >> "$(lxc_conf 101)"
+    run_fn enable_tun_lxc 101
+    assert_status 0
+    assert_output_has "[*] Enabling /dev/net/tun for CT 101"
+    [[ "$(grep -cFx -- "$TUN_ALLOW_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+    [[ "$(grep -cFx -- "$TUN_MOUNT_LINE" "$(lxc_conf 101)")" -eq 1 ]]
+}
+
 # --- the "already joined" check ----------------------------------------------
 
 @test "is_lxc_tailscale_active: 192.100.5.5 is not a tailnet address, 100.64.0.7 is" {

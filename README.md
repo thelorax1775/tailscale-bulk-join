@@ -10,7 +10,7 @@
 
 - **Covers both LXC containers and QEMU/KVM VMs** on the node.
 - **Idempotent** — already-connected guests are detected and skipped; safe to re-run.
-- **Auto-configures `/dev/net/tun`** for containers (adds the cgroup allow + bind mount to the container config and reboots once when needed).
+- **Auto-configures `/dev/net/tun`** for containers (adds the cgroup allow + bind mount to the container config and reboots once when needed). A container that already has `/dev/net/tun` via Proxmox Device Passthrough (`devN: /dev/net/tun` or `devN: path=/dev/net/tun,…` in its config) is recognized as configured and is left alone.
 - **Checks for `/dev/net/tun` on the host** and only loads (and persists) the `tun` module when it is missing — on Proxmox VE the kernel normally has `tun` built in, so the device already exists.
 - **Multi-distro guest support** — installs prerequisites via `apt`, `apk`, `dnf`, or `yum`.
 - **Automatic retry** — if the first join fails (a known `tailscaled` startup race), the guest is rebooted and the join is retried once.
