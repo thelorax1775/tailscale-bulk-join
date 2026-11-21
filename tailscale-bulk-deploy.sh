@@ -215,11 +215,15 @@ enable_tun_lxc() {
 
     # Only the live part of the config counts: from the first "[name]" header
     # on, everything belongs to a snapshot and is neither read nor changed.
+    # "Already configured" is either the legacy cgroup2 allow line or a Proxmox
+    # device passthrough line "devN: [path=]/dev/net/tun[,options...]" (Proxmox
+    # 8.1+, Datacenter -> Container -> Options -> Device Passthrough): both
+    # give the container /dev/net/tun without the bind mount being added here.
     # Returns:
     #   0 = TUN lines added (config changed)
     #   1 = already configured (TUN lines already present in live config)
     #   3 = could not edit config (mktemp or write failure)
-    if lxc_live_config "$conf" | grep -qxF 'lxc.cgroup2.devices.allow: c 10:200 rwm'; then
+    if lxc_live_config "$conf" | grep -qE '^lxc\.cgroup2\.devices\.allow: c 10:200 rwm$|^dev[0-9]+:[[:space:]]*(path=)?/dev/net/tun([,[:space:]]|$)'; then
         return 1   # already configured, nothing changed
     fi
 

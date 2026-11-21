@@ -78,6 +78,21 @@ setup() {
     assert_calls 0 "qm reboot"
 }
 
+@test "an LXC with a Proxmox devN passthrough line gets no TUN edit and no reboot, and still joins" {
+    add_lxc 101 web
+    printf 'dev0: /dev/net/tun\n' >> "$(lxc_conf 101)"
+    local conf_before
+    conf_before=$(cat "$(lxc_conf 101)")
+    run_script
+    assert_status 0
+    refute_output_has "Enabling /dev/net/tun"
+    assert_summary 1 0 0
+    assert_calls 0 "pct reboot"
+    refute_lxc_tun 101
+    cmp "$(lxc_conf 101)" <(cat <<<"$conf_before")
+    assert_calls 1 "guest 101: tailscale up"
+}
+
 @test "a second run over the same node joins nothing and skips everything" {
     add_lxc 101 web
     add_vm 201 db
