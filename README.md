@@ -62,7 +62,7 @@ Everything is driven by environment variables — there are no positional argume
 | `TS_EXTRA_ARGS` | | _(empty)_ | Extra flags appended to every `tailscale up` call, e.g. `--ssh --accept-routes --advertise-tags=tag:prox`. |
 | `TS_HOSTNAME_PREFIX` | | `ct-` / `vm-` | Override the hostname prefix used at enrollment. By default containers enroll as `ct-<id>` and VMs as `vm-<id>`; set this to force a single prefix for both. |
 | `TS_LOGIN_SERVER` | | _(Tailscale)_ | Point at a custom control server (e.g. [Headscale](https://github.com/juanfont/headscale)). Passed as `--login-server=<url>`. |
-| `PVE_NODE` | | `$(hostname -s)` | Node name to scan. Override if the short hostname doesn't match your PVE node name. |
+| `PVE_NODE` | | `$(hostname -s)` | Node name to scan. Override if the short hostname doesn't match your PVE node name. If the node cannot be listed the script stops with an error. |
 
 ### Examples
 
