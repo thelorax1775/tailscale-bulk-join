@@ -215,6 +215,52 @@ setup() {
     assert_calls 1 "guest 101: tailscale up"
 }
 
+@test "LXC that does not come back after retry reboot is failed and the scan carries on" {
+    add_lxc 101 web
+    lxc_has_tun 101
+    guest_has_tailscale 101
+    guest_up_plan 101 "tailscaled not running"
+    guest_flag 101 down_after_reboot
+    add_lxc 102 next
+    lxc_has_tun 102
+    guest_joined 102
+    run_script
+    assert_status 0
+    assert_output_has "[X] CT 101 did not come back up in time after reboot"
+    assert_output_has "LXC 102 | next"
+    assert_summary 0 1 1
+    assert_calls 1 "pct reboot 101"
+    assert_calls 1 "guest 101: tailscale up"
+}
+
+@test "VM whose guest agent does not return after retry reboot is failed" {
+    add_vm 201 db
+    guest_has_tailscale 201
+    guest_up_plan 201 "tailscaled not running"
+    guest_flag 201 down_after_reboot
+    run_script
+    assert_status 0
+    assert_output_has "[X] Guest agent did not come back after reboot for VM 201"
+    assert_summary 0 0 1
+    assert_calls 1 "qm reboot 201"
+    assert_calls 1 "guest 201: tailscale up"
+}
+
+@test "VM with a failing reboot is failed and the scan carries on" {
+    add_vm 201 db
+    guest_has_tailscale 201
+    guest_up_plan 201 "tailscaled not running"
+    guest_flag 201 reboot_fails
+    add_vm 202 next
+    guest_joined 202
+    run_script
+    assert_status 0
+    assert_output_has "[X] Reboot failed for VM 201"
+    assert_output_has "VM 202 | next"
+    assert_summary 0 1 1
+    assert_calls 1 "guest 201: tailscale up"
+}
+
 # --- fail fast on a rejected key --------------------------------------------
 
 @test "LXC: an invalid key stops the run early: no reboot, later guests are not enrolled" {
