@@ -28,7 +28,7 @@
 | Proxmox host | `jq` (the script auto-installs it on Debian-based hosts). |
 | You | A valid, **reusable** **Tailscale auth key** (`tskey-auth-…`). [Generate one here.](https://login.tailscale.com/admin/settings/keys) A single-use key only enrolls **one** guest — the first one consumes it and every guest after that is rejected. |
 | VMs only | `qemu-guest-agent` must already be **installed and running inside the VM**. See [VMs vs. containers](#vms-vs-containers). |
-|| Guests | A POSIX `/bin/sh` (bash is not needed, so stock Alpine works). |
+| Guests | A POSIX `/bin/sh` (bash is not needed, so stock Alpine works). |
 
 ---
 
